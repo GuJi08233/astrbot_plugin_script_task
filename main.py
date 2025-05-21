@@ -51,10 +51,10 @@ class ScriptTaskPlugin(Star):
         await self.scan_scripts()
         yield event.plain_result("脚本重新加载完成")
 
-    @filter.command("公网")
-    async def execute_script(self, event: AstrMessageEvent, *args):
-        """执行指定的脚本"""
-        script_name = event.command  # 获取命令名（不包含/）
+    @filter.command("公网", args={})  # 设置args为空字典，表示不需要参数
+    async def execute_script(self, event: AstrMessageEvent):
+        """执行公网IP查询脚本"""
+        script_name = "公网ip"  # 直接指定脚本名称
         
         if script_name not in self.scripts:
             yield event.plain_result(f"未找到脚本: {script_name}")
@@ -63,8 +63,8 @@ class ScriptTaskPlugin(Star):
         try:
             script_module = self.scripts[script_name]
             if hasattr(script_module, 'main'):
-                result = await script_module.main(*args)
-                yield event.plain_result(str(result))
+                result = await script_module.main()
+                yield event.plain_result(f"您的公网IP地址是：{result}")
             else:
                 yield event.plain_result(f"脚本 {script_name} 没有 main 函数")
         except Exception as e:
