@@ -1,24 +1,76 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
+import os
+import importlib.util
+import asyncio
+from pathlib import Path
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
-class MyPlugin(Star):
+@register("script_task", "YourName", "一个动态执行脚本的插件", "1.0.0")
+class ScriptTaskPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
+        self.script_dir = Path(__file__).parent / "script"
+        self.script_dir.mkdir(exist_ok=True)
+        self.scripts = {}  # 用于缓存已加载的脚本模块
 
     async def initialize(self):
-        """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
-    
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        """这是一个 hello world 指令""" # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
-        user_name = event.get_sender_name()
-        message_str = event.message_str # 用户发的纯文本消息字符串
-        message_chain = event.get_messages() # 用户所发的消息的消息链 # from astrbot.api.message_components import *
-        logger.info(message_chain)
-        yield event.plain_result(f"Hello, {user_name}, 你发了 {message_str}!") # 发送一条纯文本消息
+        """初始化时扫描脚本目录"""
+        await self.scan_scripts()
+
+    async def scan_scripts(self):
+        """扫描脚本目录，加载所有.py文件"""
+        for file in self.script_dir.glob("*.py"):
+            if file.stem.startswith("_"):  # 跳过以_开头的文件
+                continue
+            try:
+                # 动态加载模块
+                spec = importlib.util.spec_from_file_location(file.stem, file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    self.scripts[file.stem] = module
+                    logger.info(f"成功加载脚本: {file.stem}")
+            except Exception as e:
+                logger.error(f"加载脚本 {file.stem} 失败: {str(e)}")
+
+    @filter.command("script")
+    async def list_scripts(self, event: AstrMessageEvent):
+        """列出所有可用的脚本"""
+        if not self.scripts:
+            yield event.plain_result("当前没有可用的脚本")
+            return
+        
+        script_list = "\n".join([f"/{name}" for name in self.scripts.keys()])
+        yield event.plain_result(f"可用的脚本列表：\n{script_list}")
+
+    @filter.command("reload")
+    async def reload_scripts(self, event: AstrMessageEvent):
+        """重新加载所有脚本"""
+        self.scripts.clear()
+        await self.scan_scripts()
+        yield event.plain_result("脚本重新加载完成")
+
+    @filter.command("公网")
+    async def execute_script(self, event: AstrMessageEvent, *args):
+        """执行指定的脚本"""
+        script_name = event.command  # 获取命令名（不包含/）
+        
+        if script_name not in self.scripts:
+            yield event.plain_result(f"未找到脚本: {script_name}")
+            return
+
+        try:
+            script_module = self.scripts[script_name]
+            if hasattr(script_module, 'main'):
+                result = await script_module.main(*args)
+                yield event.plain_result(str(result))
+            else:
+                yield event.plain_result(f"脚本 {script_name} 没有 main 函数")
+        except Exception as e:
+            logger.error(f"执行脚本 {script_name} 时出错: {str(e)}")
+            yield event.plain_result(f"执行脚本时出错: {str(e)}")
 
     async def terminate(self):
-        """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
+        """插件终止时的清理工作"""
+        self.scripts.clear()
