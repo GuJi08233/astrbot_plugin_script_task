@@ -6,7 +6,7 @@ import importlib.util
 import asyncio
 from pathlib import Path
 
-@register("script_task", "YourName", "一个动态执行脚本的插件", "1.0.0")
+@register("script_task", "YourName", "一个动态执行脚本的插件", "1.2.0")
 class ScriptTaskPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -65,6 +65,26 @@ class ScriptTaskPlugin(Star):
             if hasattr(script_module, 'main'):
                 result = await script_module.main()
                 yield event.plain_result(f"您的公网IP地址是：{result}")
+            else:
+                yield event.plain_result(f"脚本 {script_name} 没有 main 函数")
+        except Exception as e:
+            logger.error(f"执行脚本 {script_name} 时出错: {str(e)}")
+            yield event.plain_result(f"执行脚本时出错: {str(e)}")
+
+    @filter.command("电费", args={"account": "学号"})  # 添加电费查询命令，需要account参数
+    async def execute_electricity(self, event: AstrMessageEvent, account: str):
+        """执行电费查询脚本"""
+        script_name = "电费"  # 直接指定脚本名称
+        
+        if script_name not in self.scripts:
+            yield event.plain_result(f"未找到脚本: {script_name}")
+            return
+
+        try:
+            script_module = self.scripts[script_name]
+            if hasattr(script_module, 'main'):
+                result = await script_module.main(account)
+                yield event.plain_result(result)
             else:
                 yield event.plain_result(f"脚本 {script_name} 没有 main 函数")
         except Exception as e:
