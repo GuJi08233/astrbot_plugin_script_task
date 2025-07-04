@@ -5,10 +5,10 @@ async def get_public_ip():
     """获取公网IP地址"""
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://api.ipify.org?format=json') as response:
+            async with session.get('https://ip.3322.net') as response:
                 if response.status == 200:
-                    data = await response.json()
-                    return data['ip']
+                    ip = await response.text()
+                    return ip.strip()
                 else:
                     return "获取IP失败"
     except Exception as e:
