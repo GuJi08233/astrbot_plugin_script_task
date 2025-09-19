@@ -1,7 +1,6 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.permission import PermissionLevel
 import os
 import importlib.util
 import asyncio
@@ -35,14 +34,10 @@ class ScriptTaskPlugin(Star):
             except Exception as e:
                 logger.error(f"加载脚本 {file.stem} 失败: {str(e)}")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("script")
     async def list_scripts(self, event: AstrMessageEvent):
-        """列出所有可用的脚本（需要管理员权限）"""
-        # 检查管理员权限
-        if not event.get_permission_level() >= PermissionLevel.ADMIN:
-            yield event.plain_result("❌ 该命令需要管理员权限")
-            return
-            
+        """列出所有可用的脚本（管理员专用）"""
         if not self.scripts:
             yield event.plain_result("当前没有可用的脚本")
             return
@@ -50,27 +45,19 @@ class ScriptTaskPlugin(Star):
         script_list = "\n".join([f"/{name}" for name in self.scripts.keys()])
         yield event.plain_result(f"可用的脚本列表：\n{script_list}")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("reload")
     async def reload_scripts(self, event: AstrMessageEvent):
-        """重新加载所有脚本（需要管理员权限）"""
-        # 检查管理员权限
-        if not event.get_permission_level() >= PermissionLevel.ADMIN:
-            yield event.plain_result("❌ 该命令需要管理员权限")
-            return
-            
+        """重新加载所有脚本（管理员专用）"""
         self.scripts.clear()
         await self.scan_scripts()
         yield event.plain_result("脚本重新加载完成")
 
-    @filter.command("公网", args={})  # 设置args为空字典，表示不需要参数
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("公网", args={})
     async def execute_script(self, event: AstrMessageEvent):
-        """执行公网IP查询脚本（需要管理员权限）"""
-        # 检查管理员权限
-        if not event.get_permission_level() >= PermissionLevel.ADMIN:
-            yield event.plain_result("❌ 该命令需要管理员权限")
-            return
-            
-        script_name = "公网ip"  # 直接指定脚本名称
+        """执行公网IP查询脚本（管理员专用）"""
+        script_name = "公网ip"
         
         if script_name not in self.scripts:
             yield event.plain_result(f"未找到脚本: {script_name}")
@@ -87,15 +74,11 @@ class ScriptTaskPlugin(Star):
             logger.error(f"执行脚本 {script_name} 时出错: {str(e)}")
             yield event.plain_result(f"执行脚本时出错: {str(e)}")
 
-    @filter.command("电费", args={"account": "学号/快捷码"})  # 支持学号和快捷码
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("电费", args={"account": "学号/快捷码"})
     async def execute_electricity(self, event: AstrMessageEvent, account: str):
-        """执行电费查询脚本（需要管理员权限）"""
-        # 检查管理员权限
-        if not event.get_permission_level() >= PermissionLevel.ADMIN:
-            yield event.plain_result("❌ 该命令需要管理员权限")
-            return
-            
-        script_name = "电费"  # 直接指定脚本名称
+        """执行电费查询脚本（管理员专用）"""
+        script_name = "电费"
         
         if script_name not in self.scripts:
             yield event.plain_result(f"未找到脚本: {script_name}")
@@ -112,14 +95,10 @@ class ScriptTaskPlugin(Star):
             logger.error(f"执行脚本 {script_name} 时出错: {str(e)}")
             yield event.plain_result(f"执行脚本时出错: {str(e)}")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("电费绑定", args={})
     async def list_electricity_bindings(self, event: AstrMessageEvent):
-        """查看电费查询绑定列表（需要管理员权限）"""
-        # 检查管理员权限
-        if not event.get_permission_level() >= PermissionLevel.ADMIN:
-            yield event.plain_result("❌ 该命令需要管理员权限")
-            return
-            
+        """查看电费查询绑定列表（管理员专用）"""
         script_name = "电费"
         
         if script_name not in self.scripts:
@@ -129,7 +108,6 @@ class ScriptTaskPlugin(Star):
         try:
             script_module = self.scripts[script_name]
             if hasattr(script_module, 'room_manager'):
-                # 获取绑定列表
                 bindings = []
                 for shortcut, info in script_module.room_manager.mapping.items():
                     bindings.append(f"快捷码: {shortcut} -> 学号: {info['account']} (房间: {info['room_name']})")
