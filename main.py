@@ -20,19 +20,37 @@ class ScriptTaskPlugin(Star):
 
     async def scan_scripts(self):
         """扫描脚本目录，加载所有.py文件"""
-        for file in self.script_dir.glob("*.py"):
+        logger.info(f"开始扫描脚本目录: {self.script_dir}")
+        script_files = list(self.script_dir.glob("*.py"))
+        logger.info(f"找到 {len(script_files)} 个脚本文件")
+        
+        for file in script_files:
+            logger.info(f"处理脚本文件: {file.name} (stem: {file.stem})")
             if file.stem.startswith("_"):  # 跳过以_开头的文件
+                logger.info(f"跳过以_开头的文件: {file.name}")
                 continue
             try:
                 # 动态加载模块
+                logger.info(f"尝试加载脚本: {file.stem}")
                 spec = importlib.util.spec_from_file_location(file.stem, file)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     self.scripts[file.stem] = module
                     logger.info(f"成功加载脚本: {file.stem}")
+                    # 检查模块是否有main函数
+                    if hasattr(module, 'main'):
+                        logger.info(f"脚本 {file.stem} 有 main 函数")
+                    else:
+                        logger.warning(f"脚本 {file.stem} 没有 main 函数")
+                else:
+                    logger.error(f"无法为脚本 {file.stem} 创建spec")
             except Exception as e:
                 logger.error(f"加载脚本 {file.stem} 失败: {str(e)}")
+                import traceback
+                logger.error(f"详细错误信息: {traceback.format_exc()}")
+        
+        logger.info(f"脚本加载完成，已加载的脚本: {list(self.scripts.keys())}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("script")

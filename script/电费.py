@@ -186,6 +186,12 @@ async def get_electricity_usage(account: str):
                 else:
                     return None, f"请求失败: HTTP {response.status}"
         
+    except asyncio.TimeoutError:
+        return None, "查询超时，请稍后重试"
+    except aiohttp.ClientError as e:
+        return None, f"网络连接失败: {str(e)}"
+    except Exception as e:
+        return None, f"查询出错: {str(e)}"
 
 
 async def main(account: str):
