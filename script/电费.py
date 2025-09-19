@@ -71,8 +71,11 @@ async def get_electricity_usage(account: str):
             "customercode": customercode,
         }
 
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=data) as response:
+            async with session.post(url, data=data, headers=headers) as response:
                 if response.status == 200:
                     response_data = await response.json()
                     
