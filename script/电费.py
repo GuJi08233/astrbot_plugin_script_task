@@ -69,9 +69,10 @@ async def get_electricity_usage(account: str):
         
         account = account.strip()
         
-        customercode = 1575
+        customercode = 1575  # 直接硬编码customercode
         url = "https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAEServlet"
         
+        # 构建请求参数 - 参考用户提供的代码格式
         data = {
             "param": f'{{"cmd":"h5_getstuindexpage","account":"{account}"}}',
             "customercode": customercode,
@@ -79,16 +80,18 @@ async def get_electricity_usage(account: str):
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Content-Type': 'application/x-www-form-urlencoded',
             'Accept': 'application/json, text/plain, */*',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive'
+            'Connection': 'keep-alive',
+            'Referer': 'https://xqh5.17wanxiao.com/',
+            'Origin': 'https://xqh5.17wanxiao.com'
         }
         
         timeout = aiohttp.ClientTimeout(total=30)  # 设置30秒超时
         
         async with aiohttp.ClientSession(timeout=timeout) as session:
+            # 使用POST请求，参考用户提供的代码
             async with session.post(url, data=data, headers=headers) as response:
                 if response.status == 200:
                     response_text = await response.text()
@@ -104,40 +107,48 @@ async def get_electricity_usage(account: str):
                         except json.JSONDecodeError:
                             return None, "服务器返回的主体数据格式错误"
                         
-                        # 获取房间号
-                        room_number = body.get('roomfullname', '未知房间')
+                        # 获取房间号 - 参考用户代码，使用列表格式
+                        room_number = body.get('roomfullname', [])
                         
                         # 获取电费信息
                         modist = body.get("modlist", [])
                         current_power = None
-                        
-                        # 遍历modlist查找电费 - 支持多种可能的字段名
+                        weekuselist = None
+
+                        # 遍历modlist查找电费和用电记录 - 参考用户代码逻辑
                         for item in modist:
-                            if isinstance(item, dict):
-                                # 尝试多种可能的电费字段名
-                                for field in ['odd', 'power', 'electricity', '剩余电量', 'balance', 'elec', 'elec_balance']:
-                                    if field in item and item[field] is not None and str(item[field]).strip():
-                                        try:
-                                            current_power = float(str(item[field]).strip())
-                                            break
-                                        except (ValueError, TypeError):
-                                            continue
-                                if current_power is not None:
-                                    break
-                        
-                        # 如果没有找到电费信息，检查是否有其他电量相关字段
-                        if current_power is None:
-                            # 检查body中是否有直接的电量信息
-                            for field in ['electricity', 'power', 'balance', '剩余电量', 'elec', 'elec_balance']:
-                                if field in body and body[field] is not None and str(body[field]).strip():
-                                    try:
-                                        current_power = float(str(body[field]).strip())
-                                        break
-                                    except (ValueError, TypeError):
-                                        continue
-                        
+                            if not isinstance(item, dict):
+                                continue
+                            
+                            # 获取当前电费
+                            if 'odd' in item:
+                                current_power = item['odd']
+                            
+                            # 获取周用电记录
+                            if 'weekuselist' in item:
+                                weekuselist = item['weekuselist']
+
+                        # 处理周用电数据
+                        weekly_usage = []
+                        if weekuselist:
+                            for week in weekuselist:
+                                if isinstance(week, dict):
+                                    usage_entry = {
+                                        "date": week.get('date', '未知日期'),
+                                        "usage": week.get('dayuse', '0'),
+                                        "day_of_week": week.get('weekday', '未知')
+                                    }
+                                    weekly_usage.append(usage_entry)
+
+                        # 检查电量值并格式化
                         if current_power is None:
                             return None, "该学号未绑定房间号或电费信息获取失败"
+                        
+                        # 尝试转换为浮点数
+                        try:
+                            current_power = float(str(current_power).strip())
+                        except (ValueError, TypeError):
+                            return None, f"电量数据格式错误: {current_power}"
                         
                         # 检查电量值是否合理（0-99999度）
                         if not (0 <= current_power <= 99999):
@@ -152,12 +163,19 @@ async def get_electricity_usage(account: str):
                         elif current_power < 50:
                             warning_msg = "\n💡 电量适中，注意合理使用"
                         
-                        # 格式化电量显示，保留2位小数
+                        # 构建返回消息
                         result_msg = f"房间号: {room_number}\n当前电量: {current_power:.2f} 度{warning_msg}"
+                        
+                        # 添加周用电信息
+                        if weekly_usage:
+                            result_msg += "\n\n最近一周用电情况:"
+                            result_msg += "\n" + "-" * 30
+                            for day in weekly_usage[-7:]:  # 只显示最近7天
+                                result_msg += f"\n{day['date']} ({day['day_of_week']}): {day['usage']} 度"
                         
                         # 添加查询时间
                         query_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        result_msg += f"\n查询时间: {query_time}"
+                        result_msg += f"\n\n查询时间: {query_time}"
                         
                         return room_number, result_msg
                     else:
@@ -167,13 +185,8 @@ async def get_electricity_usage(account: str):
                         return None, f"查询失败: {error_msg}"
                 else:
                     return None, f"请求失败: HTTP {response.status}"
-                    
-    except asyncio.TimeoutError:
-        return None, "查询超时，请稍后重试"
-    except aiohttp.ClientError as e:
-        return None, f"网络连接失败: {str(e)}"
-    except Exception as e:
-        return None, f"查询出错: {str(e)}"
+        
+
 
 async def main(account: str):
     """主函数，返回电费信息"""
@@ -256,6 +269,9 @@ def get_help_info():
 • <20度：⚠️ 电量偏低，建议及时充值
 • <50度：💡 电量适中，注意合理使用
 
+📊 周用电记录：
+查询结果会显示最近一周的每日用电量
+
 🔧 管理员功能：
 /电费绑定 - 查看所有绑定关系
 /重载 - 重新加载脚本
@@ -263,7 +279,7 @@ def get_help_info():
 💡 提示：
 • 学号格式支持字母、数字、下划线、连字符
 • 快捷码为2-6位数字
-• 查询结果包含实时时间和房间信息"""
+• 查询结果包含实时时间、房间信息和周用电统计"""
 
 async def get_status_info():
     """获取插件状态信息"""
