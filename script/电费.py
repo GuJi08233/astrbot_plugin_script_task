@@ -1,4 +1,5 @@
 import aiohttp
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -72,11 +73,13 @@ async def get_electricity_usage(account: str):
         customercode = 1575  # 直接硬编码customercode
         url = "https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAEServlet"
         
-        # 构建请求参数 - 参考用户提供的代码格式
-        data = {
-            "param": f'{{"cmd":"h5_getstuindexpage","account":"{account}"}}',
-            "customercode": customercode,
-        }
+        # 添加调试日志
+        print(f"正在查询电费，学号: {account}, customercode: {customercode}")
+        
+        # 构建请求参数 - 使用FormData格式，模拟原始requests.post的行为
+        data = aiohttp.FormData()
+        data.add_field('param', f'{{"cmd":"h5_getstuindexpage","account":"{account}"}}')
+        data.add_field('customercode', str(customercode))
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -91,14 +94,17 @@ async def get_electricity_usage(account: str):
         timeout = aiohttp.ClientTimeout(total=30)  # 设置30秒超时
         
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            # 使用POST请求，参考用户提供的代码
-            async with session.post(url, data=data, headers=headers) as response:
+            # 使用POST请求，确保数据格式正确
+            async with session.post(url, data=data, headers=headers, ssl=True) as response:
+                print(f"HTTP响应状态: {response.status}")
                 if response.status == 200:
                     response_text = await response.text()
+                    print(f"响应内容: {response_text[:200]}...")  # 打印前200字符用于调试
                     
                     try:
                         response_data = json.loads(response_text)
                     except json.JSONDecodeError:
+                        print(f"JSON解析失败，原始响应: {response_text}")
                         return None, "服务器返回数据格式错误"
                     
                     if response_data.get("code_") == 0:
@@ -184,13 +190,20 @@ async def get_electricity_usage(account: str):
                             return None, "该学号未绑定宿舍或学号不存在"
                         return None, f"查询失败: {error_msg}"
                 else:
+                    error_text = await response.text()
+                    print(f"HTTP错误响应: {response.status}, 内容: {error_text[:200]}...")
                     return None, f"请求失败: HTTP {response.status}"
         
     except asyncio.TimeoutError:
+        print("查询超时")
         return None, "查询超时，请稍后重试"
     except aiohttp.ClientError as e:
+        print(f"网络连接失败: {str(e)}")
         return None, f"网络连接失败: {str(e)}"
     except Exception as e:
+        print(f"查询出错: {str(e)}")
+        import traceback
+        print(f"详细错误: {traceback.format_exc()}")
         return None, f"查询出错: {str(e)}"
 
 
