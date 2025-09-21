@@ -142,6 +142,48 @@ class ScriptTaskPlugin(Star):
             logger.error(f"获取绑定列表时出错: {str(e)}")
             yield event.plain_result(f"获取绑定列表时出错: {str(e)}")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("绑定房间", args={"room_number": "房间号", "account": "学号"})
+    async def bind_electricity(self, event: AstrMessageEvent, room_number: str, account: str):
+        """绑定房间电费查询（管理员专用）"""
+        script_name = "电费"
+        
+        if script_name not in self.scripts:
+            yield event.plain_result(f"未找到脚本: {script_name}")
+            return
+
+        try:
+            script_module = self.scripts[script_name]
+            if hasattr(script_module, 'bind_room'):
+                result = await script_module.bind_room(room_number, account)
+                yield event.plain_result(result)
+            else:
+                yield event.plain_result("脚本不支持绑定功能")
+        except Exception as e:
+            logger.error(f"绑定房间电费时出错: {str(e)}")
+            yield event.plain_result(f"绑定房间电费时出错: {str(e)}")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("解绑房间", args={"room_number": "房间号"})
+    async def unbind_electricity(self, event: AstrMessageEvent, room_number: str):
+        """解绑房间电费查询（管理员专用）"""
+        script_name = "电费"
+        
+        if script_name not in self.scripts:
+            yield event.plain_result(f"未找到脚本: {script_name}")
+            return
+
+        try:
+            script_module = self.scripts[script_name]
+            if hasattr(script_module, 'unbind_room'):
+                result = await script_module.unbind_room(room_number)
+                yield event.plain_result(result)
+            else:
+                yield event.plain_result("脚本不支持解绑功能")
+        except Exception as e:
+            logger.error(f"解绑房间电费时出错: {str(e)}")
+            yield event.plain_result(f"解绑房间电费时出错: {str(e)}")
+
     async def terminate(self):
         """插件终止时的清理工作"""
         self.scripts.clear()
